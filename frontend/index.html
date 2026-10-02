@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="GridSense Delhi - Real-Time AI Electricity Demand Prediction & SCADA Dispatcher Control Room for Delhi SLDC & 5 Discoms (BRPL, BYPL, TPDDL, NDMC, MES)">
+  <meta name="color-scheme" content="dark light">
+  <title>GridSense Delhi | SLDC AI Electricity Demand Forecasting & Control Room</title>
+
+  <!-- Prevent FOUC Theme Script -->
+  <script>
+    (function() {
+      const savedTheme = localStorage.getItem("gridsense-theme");
+      if (savedTheme) {
+        document.documentElement.setAttribute("data-theme", savedTheme);
+      }
+    })();
+  </script>
+
+  <!-- Stylesheets -->
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="icon" type="image/jpeg" href="assets/logo.jpg">
+</head>
+<body>
+  <div id="app-container">
+
+    <!-- ====================================================================
+         TOP APP HEADER
+         ==================================================================== -->
+    <header class="app-header">
+      <div class="brand-section">
+        <img src="assets/logo.jpg" alt="Delhi SLDC Emblem" class="brand-logo-img" id="brand-logo">
+        <div class="brand-text">
+          <h1>
+            GridSense Delhi
+            <span class="brand-badge">SLDC SCADA AI</span>
+          </h1>
+          <div class="brand-subtitle">State Load Despatch Center • Delhi Discom Control Room</div>
+        </div>
+      </div>
+
+      <div class="header-status-group">
+        <!-- Frequency Monitor -->
+        <div class="frequency-pill" id="grid-frequency-monitor" title="Delhi Central Transmission Grid Frequency (Nominal 50.00 Hz)">
+          <div class="freq-dot" id="grid-freq-dot"></div>
+          <span class="freq-value" id="grid-freq-val">50.01 Hz</span>
+          <span class="freq-status" id="grid-freq-status">NOMINAL</span>
+        </div>
+
+        <!-- SCADA Live Pulse -->
+        <div class="scada-pulse-pill" title="Live Telemetry Ingestion from SLDC loc=0804 & 0805">
+          <div class="pulse-radar"></div>
+          <span id="ws-status-text">SCADA FEED ACTIVE</span>
+        </div>
+
+        <!-- Live Clock -->
+        <div class="header-clock" id="live-ist-clock">Loading IST...</div>
+      </div>
+
+      <div class="header-actions">
+        <button class="btn btn-outline" id="btn-poll-now" title="Trigger immediate real-time scrape of Delhi SLDC SCADA">
+          ⚡ Poll SCADA Now
+        </button>
+        <button class="btn btn-primary" id="btn-retrain" title="Trigger LightGBM Multi-Quantile retrain & feature extraction">
+          🧠 Retrain Model
+        </button>
+        <button class="btn btn-icon" id="btn-theme-toggle" title="Toggle Light/Dark Theme">
+          ☀️
+        </button>
+      </div>
+    </header>
+
+    <!-- ====================================================================
+         TOP KPI BANNER (DELHI GRID OVERVIEW)
+         ==================================================================== -->
+    <section class="kpi-container">
+      <div class="kpi-grid">
+        <!-- KPI 1: Delhi Total Demand -->
+        <div class="kpi-card" style="--card-accent: var(--accent-cyan);">
+          <div class="kpi-header">
+            <span class="kpi-title">Delhi State Total Load</span>
+            <span class="kpi-icon">⚡</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-big-number" id="kpi-delhi-demand">4,341</span>
+            <span class="kpi-unit">MW</span>
+            <span class="kpi-trend trend-neutral" id="kpi-od-ud">+0 MW</span>
+          </div>
+          <div class="kpi-subtext" id="kpi-delhi-sub">
+            <span>Day Peak: <b>5,002 MW</b></span>
+            <span>•</span>
+            <span>Avg: <b>4,209 MW</b></span>
+          </div>
+          <div class="kpi-progress">
+            <div class="kpi-progress-bar" id="kpi-delhi-progress" style="width: 50.1%;"></div>
+          </div>
+        </div>
+
+        <!-- KPI 2: Rooftop Solar & Net Grid -->
+        <div class="kpi-card" style="--card-accent: var(--accent-amber);">
+          <div class="kpi-header">
+            <span class="kpi-title">Rooftop Solar Generation</span>
+            <span class="kpi-icon">☀️</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-big-number" id="kpi-solar-relief" style="color:var(--accent-amber);">380</span>
+            <span class="kpi-unit">MW Relief</span>
+          </div>
+          <div class="kpi-subtext">
+            <span>Installed Target: <b>1,500 MW</b></span>
+            <span>•</span>
+            <span>Duck Relief: <b>~8.8%</b></span>
+          </div>
+          <div class="kpi-progress">
+            <div class="kpi-progress-bar" style="width: 25.3%; background: linear-gradient(90deg, #f59e0b, #10b981);"></div>
+          </div>
+        </div>
+
+        <!-- KPI 3: Weather at Delhi Load Center -->
+        <div class="kpi-card" style="--card-accent: var(--accent-emerald);">
+          <div class="kpi-header">
+            <span class="kpi-title">Delhi Grid Weather (Open-Meteo)</span>
+            <span class="kpi-icon">🌡️</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-big-number" id="kpi-weather-temp">34°C</span>
+            <span class="kpi-unit">Ambient</span>
+          </div>
+          <div class="kpi-subtext" id="kpi-weather-sub">
+            <span>Humidity: <b>52%</b></span>
+            <span>•</span>
+            <span>GHI: <b>620 W/m²</b></span>
+          </div>
+          <div class="kpi-progress">
+            <div class="kpi-progress-bar" style="width: 68%; background: linear-gradient(90deg, #10b981, #00e5ff);"></div>
+          </div>
+        </div>
+
+        <!-- KPI 4: In-State Power Generation -->
+        <div class="kpi-card" style="--card-accent: var(--accent-violet);">
+          <div class="kpi-header">
+            <span class="kpi-title">Delhi In-State Generation</span>
+            <span class="kpi-icon">🏭</span>
+          </div>
+          <div class="kpi-value-row">
+            <span class="kpi-big-number" id="plants-total-actual" style="color:var(--accent-violet);">366</span>
+            <span class="kpi-unit">MW</span>
+          </div>
+          <div class="kpi-subtext">
+            <span>CCGT Bawana + GT + 4 Waste-to-Energy Plants</span>
+          </div>
+          <div class="kpi-progress">
+            <div class="kpi-progress-bar" style="width: 32%; background: linear-gradient(90deg, #8b5cf6, #00e5ff);"></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- ====================================================================
+         NAVIGATION TABS
+         ==================================================================== -->
+    <nav class="tabs-nav-bar">
+      <button class="tab-btn active" data-tab="dispatch" id="tab-dispatch">
+        <span class="tab-icon">📊</span> SCADA & Discom Dispatch
+      </button>
+      <button class="tab-btn" data-tab="forecast" id="tab-forecast">
+        <span class="tab-icon">📈</span> AI Forecast (P10/P50/P90) & SHAP
+      </button>
+      <button class="tab-btn" data-tab="solar" id="tab-solar">
+        <span class="tab-icon">☀️</span> Rooftop Solar Duck Curve
+      </button>
+      <button class="tab-btn" data-tab="whatif" id="tab-whatif">
+        <span class="tab-icon">🔥</span> What-If Heatwave Simulator
+      </button>
+      <button class="tab-btn" data-tab="feeders" id="tab-feeders">
+        <span class="tab-icon">⚡</span> 22-Feeder Substation Network
+      </button>
+      <button class="tab-btn" data-tab="health" id="tab-health">
+        <span class="tab-icon">🛡️</span> Sources Health & Provenance
+      </button>
+    </nav>
+
+    <!-- ====================================================================
+         MAIN CONTENT AREA
+         ==================================================================== -->
+    <main class="tab-content-container">
+
+      <!-- PANE 1: SCADA DISPATCH -->
+      <section class="tab-pane active" id="pane-dispatch">
+        <div class="section-header">
+          <div>
+            <h2>Delhi Discom Real-Time Drawal Breakdown</h2>
+            <div class="section-desc">Instantaneous load against licensed peak capacity with overdraw/underdraw detection</div>
+          </div>
+        </div>
+
+        <!-- 5 Discoms Cards -->
+        <div class="discom-cards-grid" id="discom-cards-container">
+          <!-- Dynamically populated by app.js -->
+        </div>
+
+        <!-- In-State Power Plant Matrix -->
+        <div class="section-header" style="margin-top: 32px;">
+          <div>
+            <h2>In-State Thermal & Waste-to-Energy Generation</h2>
+            <div class="section-desc">Active generation by plant unit reported by SLDC Loc=0804 SCADA</div>
+          </div>
+        </div>
+        <div class="plant-table-container">
+          <table class="custom-table" id="plants-table">
+            <thead>
+              <tr>
+                <th>Plant Name</th>
+                <th>Type</th>
+                <th>Actual Generation</th>
+                <th>Schedule</th>
+                <th>Deviation</th>
+              </tr>
+            </thead>
+            <tbody id="plants-table-body">
+              <!-- Dynamically populated -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- PANE 2: AI MULTI-QUANTILE FORECAST & SHAP -->
+      <section class="tab-pane" id="pane-forecast">
+        <div class="section-header">
+          <div>
+            <h2>Multi-Quantile LightGBM Demand Forecast (P10 / P50 / P90)</h2>
+            <div class="section-desc">Probabilistic prediction intervals for peak contingency management with SHAP feature explainability</div>
+          </div>
+          <div class="filter-control-row">
+            <select class="form-control" id="forecast-entity-select">
+              <option value="DELHI">Delhi Total (State Load)</option>
+              <option value="BRPL">BRPL (BSES Rajdhani)</option>
+              <option value="BYPL">BYPL (BSES Yamuna)</option>
+              <option value="TPDDL">TPDDL (Tata Power)</option>
+              <option value="NDMC">NDMC (New Delhi MC)</option>
+              <option value="MES">MES (Military Engineer)</option>
+            </select>
+            <div style="display:flex; gap:4px;">
+              <button class="btn btn-primary btn-horizon" data-hours="24">24 Hours</button>
+              <button class="btn btn-outline btn-horizon" data-hours="168">7 Days (168h)</button>
+            </div>
+          </div>
+        </div>
+
+        <!-- SVG Forecast Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-legend">
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:var(--accent-cyan);"></div>
+                <span><b>P50 Median Forecast</b></span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:rgba(0, 229, 255, 0.25);"></div>
+                <span>P10 - P90 Confidence Band</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:var(--accent-amber); border-style:dashed;"></div>
+                <span>Solar Net Demand</span>
+              </div>
+            </div>
+            <span style="font-size:0.75rem; color:var(--text-muted);">Hover points for values • Click for SHAP waterfall</span>
+          </div>
+          <div class="svg-chart-wrapper" id="forecast-svg-container">
+            <!-- Rendered by ForecastChart in charts.js -->
+          </div>
+        </div>
+
+        <!-- SHAP Explainability Drawer -->
+        <div class="shap-drawer-card">
+          <div class="section-header" style="margin-bottom:8px;">
+            <div>
+              <h3 id="shap-hour-header" style="font-size:1rem; color:var(--text-primary);">
+                SHAP Explainability Waterfall (Top Drivers)
+              </h3>
+              <div class="section-desc">Feature attributions translated into plain-English dispatch explanations</div>
+            </div>
+          </div>
+          <div class="shap-list" id="shap-waterfall-items">
+            <!-- Rendered dynamically -->
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 3: ROOFTOP SOLAR DUCK CURVE -->
+      <section class="tab-pane" id="pane-solar">
+        <div class="section-header">
+          <div>
+            <h2>Rooftop Solar Duck Curve & Net Transmission Demand</h2>
+            <div class="section-desc">Solar generation profile derating by temperature & GHI irradiance showing evening ramp pressure</div>
+          </div>
+          <div class="filter-control-row">
+            <span style="font-size:0.8rem; color:var(--text-secondary);">Installed Solar Capacity:</span>
+            <input type="range" id="solar-capacity-slider" min="500" max="3000" step="100" value="1500" style="width:160px;">
+            <span class="slider-val-badge" id="solar-capacity-val">1500 MW</span>
+          </div>
+        </div>
+
+        <!-- Duck Curve Metrics Row -->
+        <div class="kpi-grid" style="margin-bottom:20px;">
+          <div class="kpi-card">
+            <div class="kpi-title">Peak Solar Generation</div>
+            <div class="kpi-value-row">
+              <span class="kpi-big-number" id="duck-peak-solar" style="color:var(--accent-amber);">1,073</span>
+              <span class="kpi-unit">MW</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Duck Curve Belly Hour</div>
+            <div class="kpi-value-row">
+              <span class="kpi-big-number" id="duck-belly-hour">13:00</span>
+              <span class="kpi-unit">IST</span>
+            </div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Evening Ramp Rate (17:00-19:00)</div>
+            <div class="kpi-value-row">
+              <span class="kpi-big-number" id="duck-evening-ramp" style="color:var(--accent-rose);">+680</span>
+              <span class="kpi-unit">MW/hr</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Duck Curve Chart -->
+        <div class="chart-card">
+          <div class="chart-header">
+            <div class="chart-legend">
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:var(--accent-cyan);"></div>
+                <span>Gross Demand</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:var(--accent-amber);"></div>
+                <span>Net Transmission Demand</span>
+              </div>
+              <div class="legend-item">
+                <div class="legend-color-box" style="background:rgba(245, 158, 11, 0.25);"></div>
+                <span>Solar Relief Wedge</span>
+              </div>
+            </div>
+          </div>
+          <div class="svg-chart-wrapper" id="duck-curve-svg-container" style="height:340px;">
+            <!-- Rendered by DuckCurveChart -->
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 4: WHAT-IF HEATWAVE SIMULATOR -->
+      <section class="tab-pane" id="pane-whatif">
+        <div class="section-header">
+          <div>
+            <h2>What-If Heatwave & Extreme Weather Stress Simulator</h2>
+            <div class="section-desc">Evaluate grid resilience and peak surge under thermal cooling load elasticity (+1°C to +8°C)</div>
+          </div>
+        </div>
+
+        <div class="simulator-layout">
+          <!-- Controls -->
+          <div class="sim-controls-panel">
+            <h3 style="font-size:0.95rem; font-weight:700;">Scenario Parameters</h3>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>Target Entity:</span>
+              </div>
+              <select class="form-control" id="sim-entity-select">
+                <option value="DELHI">Delhi Total (State Load)</option>
+                <option value="BRPL">BRPL (BSES Rajdhani)</option>
+                <option value="BYPL">BYPL (BSES Yamuna)</option>
+                <option value="TPDDL">TPDDL (Tata Power)</option>
+                <option value="NDMC">NDMC (New Delhi MC)</option>
+                <option value="MES">MES (Military Engineer)</option>
+              </select>
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>Temperature Surge (Offset):</span>
+                <span class="slider-val-badge" id="sim-temp-val">+3.0°C</span>
+              </div>
+              <input type="range" id="sim-temp-slider" min="-2" max="8" step="0.5" value="3.0">
+              <div style="font-size:0.68rem; color:var(--text-muted)">Simulate summer peak heatwaves up to 48°C</div>
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>Relative Humidity Offset:</span>
+                <span class="slider-val-badge" id="sim-hum-val">+0%</span>
+              </div>
+              <input type="range" id="sim-hum-slider" min="-20" max="30" step="5" value="0">
+              <div style="font-size:0.68rem; color:var(--text-muted)">Monsoon mugginess & wet-bulb index shift</div>
+            </div>
+
+            <div class="sim-slider-group">
+              <div class="slider-label-row">
+                <span>Solar Installed Capacity:</span>
+                <span class="slider-val-badge" id="sim-solar-val">1500 MW</span>
+              </div>
+              <input type="range" id="sim-solar-slider" min="500" max="3000" step="100" value="1500">
+            </div>
+
+            <button class="btn btn-primary" id="btn-run-simulation" style="padding:12px; font-size:0.9rem;">
+              🚀 Run Heatwave Simulation
+            </button>
+          </div>
+
+          <!-- Simulation Results Output -->
+          <div class="sim-results-panel">
+            <div class="sim-kpi-row">
+              <div class="kpi-card" style="--card-accent: var(--accent-cyan);">
+                <div class="kpi-title">Baseline Peak Demand</div>
+                <div class="kpi-value-row">
+                  <span class="kpi-big-number" id="sim-res-base">3,221</span>
+                  <span class="kpi-unit">MW</span>
+                </div>
+              </div>
+
+              <div class="kpi-card" style="--card-accent: var(--accent-rose);">
+                <div class="kpi-title">Scenario Peak Demand</div>
+                <div class="kpi-value-row">
+                  <span class="kpi-big-number" id="sim-res-scen" style="color:var(--accent-rose);">3,463</span>
+                  <span class="kpi-unit">MW</span>
+                </div>
+              </div>
+
+              <div class="kpi-card" style="--card-accent: var(--accent-amber);">
+                <div class="kpi-title">Peak Surge Delta</div>
+                <div class="kpi-value-row">
+                  <span class="kpi-big-number" id="sim-res-delta" style="color:var(--accent-amber);">+242</span>
+                  <span class="kpi-unit">MW</span>
+                </div>
+              </div>
+
+              <div class="kpi-card" style="--card-accent: var(--accent-emerald);">
+                <div class="kpi-title">Licensed Capacity Headroom</div>
+                <div class="kpi-value-row">
+                  <span class="kpi-big-number" id="sim-res-util">38.5%</span>
+                </div>
+              </div>
+            </div>
+
+            <div class="chart-card">
+              <h3 style="font-size:0.95rem; margin-bottom:8px;">Dispatch Advisory for Scenario</h3>
+              <p style="font-size:0.8rem; color:var(--text-secondary); line-height:1.6;">
+                Under a +3.0°C ambient temperature rise during peak afternoon hours, domestic & commercial air conditioning cooling load elasticity increases demand by approximately ~80 MW/°C across Delhi. With 1,500 MW rooftop solar buildout, midday peak is shaved by 380 MW, shifting the critical transmission stress window to <b>21:30 - 23:00 IST</b>.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- PANE 5: 22-FEEDER SUBSTATION NETWORK -->
+      <section class="tab-pane" id="pane-feeders">
+        <div class="section-header">
+          <div>
+            <h2>22-Feeder Substation Network (Delhi Discoms)</h2>
+            <div class="section-desc">66kV / 33kV / 11kV distribution feeders allocated by regulatory weights with explicit estimation tracking</div>
+          </div>
+          <div class="feeder-search-bar">
+            <input type="text" class="form-control" id="feeder-search-input" placeholder="Search feeder or substation..." style="width:240px;">
+            <select class="form-control" id="feeder-discom-filter">
+              <option value="ALL">All Discoms</option>
+              <option value="BRPL">BRPL</option>
+              <option value="BYPL">BYPL</option>
+              <option value="TPDDL">TPDDL</option>
+              <option value="NDMC">NDMC</option>
+              <option value="MES">MES</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="feeder-grid" id="feeders-grid-container">
+          <!-- Dynamically populated -->
+        </div>
+      </section>
+
+      <!-- PANE 6: SOURCES HEALTH & AUDIT -->
+      <section class="tab-pane" id="pane-health">
+        <div class="section-header">
+          <div>
+            <h2>Upstream SCADA & Weather Feeds Health</h2>
+            <div class="section-desc">Automated ingestion audits, latency telemetry and provenance verification</div>
+          </div>
+        </div>
+
+        <div class="sources-health-grid" id="sources-health-container">
+          <!-- Dynamically populated -->
+        </div>
+
+        <div class="section-header" style="margin-top:28px;">
+          <div>
+            <h2>Telemetry Storage & Quality Provenance Audit</h2>
+            <div class="section-desc">Database counts and audit metrics</div>
+          </div>
+        </div>
+
+        <div class="kpi-grid">
+          <div class="kpi-card">
+            <div class="kpi-title">Raw SCADA Telemetry (Immutable)</div>
+            <div class="kpi-big-number" id="stat-raw-records">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Cleaned Telemetry (Gap-filled)</div>
+            <div class="kpi-big-number" id="stat-clean-records">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Weather Telemetry Points</div>
+            <div class="kpi-big-number" id="stat-wx-records">0</div>
+          </div>
+          <div class="kpi-card">
+            <div class="kpi-title">Forecast Steps Generated</div>
+            <div class="kpi-big-number" id="stat-fc-records">0</div>
+          </div>
+        </div>
+      </section>
+
+    </main>
+
+    <!-- Toast Notification Container -->
+    <div id="toast-container"></div>
+
+  </div>
+
+  <!-- Application Logic -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>
